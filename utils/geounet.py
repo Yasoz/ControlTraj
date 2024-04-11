@@ -1,18 +1,8 @@
 """
 ---
 title: U-Net for Stable Diffusion
-summary: >
- Annotated PyTorch implementation/tutorial of the U-Net in stable diffusion.
----
-
-#  U-Net for [Stable Diffusion](../index.html)
-
-This implements the U-Net that
- gives $\epsilon_\text{cond}(x_t, c)$
-
-We have kept to the model definition and naming unchanged from
 [CompVis/stable-diffusion](https://github.com/CompVis/stable-diffusion)
-so that we can load the checkpoints directly.
+---
 """
 
 import math
