@@ -17,12 +17,20 @@ from utils.logger import Logger, log_info
 from pathlib import Path
 import shutil
 
+# set the GPU enviroment
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+
 def resample_trajectory(x, length=200):
+    """
+    Resample a trajectory to a fixed length using linear interpolation
+    :param x: trajectory to resample
+    :param length: length of the resampled trajectory
+    :return: resampled trajectory
+    """
     len_x = len(x)
     time_steps = np.arange(length) * (len_x - 1) / (length - 1)
     x = x.T
@@ -36,6 +44,12 @@ def gather(consts: torch.Tensor, t: torch.Tensor):
     c = consts.gather(-1, t)
     return c.reshape(-1, 1, 1)
 def compute_alpha(beta, t):
+    """
+    compute alpha for a given beta and t
+    :param beta: tensor of shape (T,)
+    :param t: tensor of shape (B,)
+    :return: tensor of shape (B, 1, 1)
+    """
     beta = torch.cat([torch.zeros(1).to(beta.device), beta], dim=0)
     a = (1 - beta).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1)
     return a
@@ -51,7 +65,15 @@ def p_xt(xt, noise, t, next_t, beta, eta=0):
     return xt_next
 
 
-def setup_experiment_directories(config, Exp_name='DiffTraj',model_name="UNet"):
+def setup_experiment_directories(config, Exp_name='ControlTraj', model_name="ControlTraj"):
+    """
+    setup the directories for the experiment
+    :param config: configuration file
+    :param Exp_name: Experiment name
+    file_save: directory to save the files
+    result_save: directory to save the results
+    model_save: directory to save the models during training
+    """
     root_dir = Path(__file__).resolve().parent
     result_name = f"{config.data.dataset}_bs={config.training.batch_size}"
     exp_dir = root_dir / Exp_name / result_name
@@ -87,7 +109,7 @@ def main(config, logger):
         eps = torch.randn_like(x0).to(x0.device)
         return mean + (var**0.5) * eps, eps  # also returns noise
 
-    # Create the model
+    # initialize the model with the configuration
     unet = UNetModel(
         in_channels = config.model.in_channels,
         out_channels = config.model.out_channels,
@@ -101,7 +123,7 @@ def main(config, logger):
     ).cuda()
     total_params = sum(p.numel() for p in unet.parameters())
     print(f'{total_params:,} total parameters.')
-    # Create AE model
+    # initialize the road encoder with RoadMAE
     autoencoder = MAE_ViT(image_size=200,
                  patch_size=5,
                  emb_dim=128,
@@ -109,14 +131,13 @@ def main(config, logger):
                  encoder_head=4,
                  decoder_layer=4,
                  decoder_head=4,
-                 mask_ratio=0.05).cuda()
+                          mask_ratio=0.00).cuda()
     autoencoder.load_state_dict(torch.load('./models/road_encoder.pt'))
-    # 设置requires_grad属性为False
+    # freeze the parameters of the road encoder
     for param in autoencoder.parameters():
         param.requires_grad = False
-    
-    # print(unet)
-    # config.data.traj_path = '/data/yuanshao/Diffusion_traj/Chengdu_Traj_3channel.npy'
+
+    # Load the data and create the dataloader
     roads = np.load('./data/porto_trajs.npy',allow_pickle=True)
     trajs = np.load('./data/porto_trajs.npy',allow_pickle=True)
     heads = np.load('./data/porto_heads.npy',allow_pickle=True)
@@ -125,10 +146,6 @@ def main(config, logger):
     trajs = torch.from_numpy(trajs).float()
     roads = torch.from_numpy(roads).float()
     heads = torch.from_numpy(heads).float()
-    
-    # config.training.batch_size =12
-    # trajs = trajs[:config.training.batch_size]
-    # roads = roads[:config.training.batch_size]
     dataset = TensorDataset(trajs, heads, roads)
     dataloader = DataLoader(dataset,
                             batch_size=config.training.batch_size,
@@ -148,7 +165,7 @@ def main(config, logger):
     # optimizer
     optim = torch.optim.AdamW(unet.parameters(), lr=lr)  # Optimizer
     
-        # EMA
+    # EMA
     if config.model.ema:
         ema_helper = EMAHelper(mu=config.model.ema_rate)
         ema_helper.register(unet)
@@ -166,6 +183,7 @@ def main(config, logger):
                 new_roads.append(resample_trajectory(road[i]))
             new_roads = np.array(new_roads)
             new_roads = new_roads.transpose(0,2,1)
+            # get the road embeddings by RoadMAE
             guide = torch.from_numpy(new_roads).float().cuda()
             with torch.no_grad():
                 guide, _= autoencoder.encoder(guide)
