@@ -138,7 +138,7 @@ def main(config, logger):
         param.requires_grad = False
 
     # Load the data and create the dataloader
-    roads = np.load('./data/porto_trajs.npy',allow_pickle=True)
+    roads = np.load('./data/porto_roads.npy',allow_pickle=True)
     trajs = np.load('./data/porto_trajs.npy',allow_pickle=True)
     heads = np.load('./data/porto_heads.npy',allow_pickle=True)
     
