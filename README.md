@@ -1,5 +1,5 @@
 # ControlTraj
-The implementation of KDD2024 submitted paper "ControlTraj: Controllable Trajectory Generation with Topology-Constrained Diffusion Model"
+The implementation of KDD2024 research paper "[ControlTraj: Controllable Trajectory Generation with Topology-Constrained Diffusion Model](https://arxiv.org/abs/2404.15380)"
 
 ### Requirements
 
